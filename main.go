@@ -11,19 +11,22 @@ import (
 
 func main() {
 	client := anthropic.NewClient()
+	agent := NewAgent(&client, promptCaptureFunction())
+	if err := agent.Run(context.TODO()); err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
+}
 
+func promptCaptureFunction() func() (string, bool) {
 	scanner := bufio.NewScanner(os.Stdin)
-	getUserMessage := func() (string, bool) {
+
+	// Create an anonymous closure to capture the user prompt from the CLI
+	return func() (string, bool) {
 		if !scanner.Scan() {
 			return "", false
 		}
 
 		return scanner.Text(), true
-	}
-
-	agent := NewAgent(&client, getUserMessage)
-	if err := agent.Run(context.TODO()); err != nil {
-		fmt.Printf("Error: %v\n", err)
 	}
 }
 
@@ -39,24 +42,28 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	fmt.Println("Chat with Claude (use 'ctrl+C' to exit)")
 
+	// Run a continuous capture sesssion for a conversation with Claude
 	for {
 		fmt.Print("\u001b[94mYou\u001b[0m: ")
-		userInput, ok := a.getUserMessage()
+		userInput, ok := a.getUserMessage() // Capture user input
 		if !ok {
 			break
 		}
 
-		// anthropic.HumanMessage(userMessage)
+		// convert user input to a message and append to conversation for contextual history or short term memory
 		userMessage := anthropic.NewUserMessage(anthropic.NewTextBlock(userInput))
 		conversation = append(conversation, userMessage)
 
+		// Run inference with the updated conversation, ala send the conversation to Claude
 		message, err := a.runInference(ctx, conversation)
 		if err != nil {
 			return err
 		}
 
+		// Append Claude's response to the conversation history
 		conversation = append(conversation, message.ToParam())
 
+		// Print out Claude's response to the CLI
 		for _, content := range message.Content {
 			switch content.Type {
 			case "text":
