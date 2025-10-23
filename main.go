@@ -9,6 +9,12 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 )
 
+const (
+	ANSI_BRIGHT_BLUE   = "\u001b[94m"
+	ANSI_BRIGHT_YELLOW = "\u001b[93m"
+	ANSI_RESET         = "\u001b[0m"
+)
+
 func main() {
 	client := anthropic.NewClient()
 	agent := NewAgent(&client, promptCaptureFunction())
@@ -30,6 +36,11 @@ func promptCaptureFunction() func() (string, bool) {
 	}
 }
 
+type Agent struct {
+	client         *anthropic.Client
+	getUserMessage func() (string, bool)
+}
+
 func NewAgent(client *anthropic.Client, getUserMessage func() (string, bool)) *Agent {
 	return &Agent{
 		client:         client,
@@ -44,8 +55,9 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	// Run a continuous capture sesssion for a conversation with Claude
 	for {
-		fmt.Print("\u001b[94mYou\u001b[0m: ")
-		userInput, ok := a.getUserMessage() // Capture user input
+		// Capture user input from the CLI
+		a.requestPrompt()
+		userInput, ok := a.getUserMessage()
 		if !ok {
 			break
 		}
@@ -67,7 +79,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		for _, content := range message.Content {
 			switch content.Type {
 			case "text":
-				fmt.Printf("\u001b[93mClaude\u001b[0m: %s\n", content.Text)
+				a.responsePrompt(content.Text)
 			default:
 				// Ignore non-text content for simplicity
 			}
@@ -77,15 +89,18 @@ func (a *Agent) Run(ctx context.Context) error {
 	return nil
 }
 
+func (a *Agent) requestPrompt() {
+	fmt.Printf("%sYou%s: ", ANSI_BRIGHT_BLUE, ANSI_RESET)
+}
+
+func (a *Agent) responsePrompt(response string) {
+	fmt.Printf("%sClaude%s: %s\n", ANSI_BRIGHT_YELLOW, ANSI_RESET, response)
+}
+
 func (a *Agent) runInference(ctx context.Context, conversation []anthropic.MessageParam) (*anthropic.Message, error) {
 	return a.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.ModelClaude3_7SonnetLatest,
 		MaxTokens: int64(1024),
 		Messages:  conversation,
 	})
-}
-
-type Agent struct {
-	client         *anthropic.Client
-	getUserMessage func() (string, bool)
 }
