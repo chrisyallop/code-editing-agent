@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	ANSI_BRIGHT_BLUE   = "\u001b[94m"
-	ANSI_BRIGHT_YELLOW = "\u001b[93m"
-	ANSI_RESET         = "\u001b[0m"
+	ANSI_GREEN  = "\u001b[92m"
+	ANSI_BLUE   = "\u001b[94m"
+	ANSI_YELLOW = "\u001b[93m"
+	ANSI_RESET  = "\u001b[0m"
 )
 
 func main() {
@@ -68,7 +69,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	// Run a continuous capture sesssion for chatting with Claude
 	readUserInput := true
 	for {
-		// Capture user input from the CLI
+		// Capture user input from the CLI, ignore for a tool response
 		if readUserInput {
 			a.requestPrompt()
 			userInput, ok := a.getUserMessage()
@@ -104,6 +105,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			}
 		}
 
+		// If there is a tool result skip reading user input and append the tool result as a user message
 		if len(toolResults) == 0 {
 			readUserInput = true
 			continue
@@ -117,15 +119,15 @@ func (a *Agent) Run(ctx context.Context) error {
 
 // Request prompt for user input
 func (a *Agent) requestPrompt() {
-	fmt.Printf("%sYou%s: ", ANSI_BRIGHT_BLUE, ANSI_RESET)
+	fmt.Printf("%sYou%s: ", ANSI_BLUE, ANSI_RESET)
 }
 
 // Response prompt for Claude's output
 func (a *Agent) responsePrompt(response string) {
-	fmt.Printf("%sClaude%s: %s\n", ANSI_BRIGHT_YELLOW, ANSI_RESET, response)
+	fmt.Printf("%sClaude%s: %s\n", ANSI_YELLOW, ANSI_RESET, response)
 }
 
-// runInference sends the conversation history to Claude and returns the response
+// runInference sends the conversation history with registered tooling to Claude and returns the response
 func (a *Agent) runInference(ctx context.Context, conversation []anthropic.MessageParam) (*anthropic.Message, error) {
 	anthropicTools := []anthropic.ToolUnionParam{}
 	for _, tool := range a.tools {
@@ -160,7 +162,7 @@ func (a *Agent) executeTool(id, name string, input json.RawMessage) anthropic.Co
 		return anthropic.NewToolResultBlock(id, "tool not found", true)
 	}
 
-	fmt.Printf("\u001b[92mtool\u001b[0m: %s(%s)\n", name, input)
+	fmt.Printf("%stool%s: %s(%s)\n", ANSI_GREEN, ANSI_RESET, name, input)
 	response, err := toolDef.Function(input)
 	if err != nil {
 		return anthropic.NewToolResultBlock(id, err.Error(), true)
@@ -199,9 +201,11 @@ func ReadFile(input json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(content), nil
 }
 
+// GenerateSchema generates a JSON schema for a given type T and returns it as a ToolInputSchemaParam
 func GenerateSchema[T any]() anthropic.ToolInputSchemaParam {
 	reflector := jsonschema.Reflector{
 		AllowAdditionalProperties: false,
